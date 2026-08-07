@@ -108,7 +108,8 @@ class TouchNumpad(tk.Toplevel):
         self.result = f"{h:02d}:{m:02d}"
         self.destroy()
 
-
+## Smart Alarm Application Class
+## Just the general application class structure
 class SmartAlarmApp:
     def __init__(self, root):
         self.root = root
@@ -173,7 +174,6 @@ class SmartAlarmApp:
             self.main_frame, text="", font=("Helvetica", 18, "bold"), fg="#64B5F6", bg="black"
         )
         self.routine_status_label.pack(pady=(5, 0))
-
         # "Up Next" Queue Preview Label
         self.up_next_label = tk.Label(
             self.main_frame, text="", font=("Helvetica", 14, "italic"), fg="#FFA726", bg="black"
