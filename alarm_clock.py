@@ -9,6 +9,7 @@ from tkinter import ttk
 import feedparser
 import requests
 from gtts import gTTS
+from datetime import datetime
 
 
 # --- CONFIGURATION & PATHS ---
@@ -432,6 +433,21 @@ class SmartAlarmApp:
             current_desc = res['current_condition'][0]['weatherDesc'][0]['value']
 
             today_hourly = res['weather'][0]['hourly']
+            tomorrow_hourly = res['weather'][1]['hourly']
+            self.weather_cache = {
+                'today_6am' : today_hourly[2],  # 06:00
+                'today_12pm': today_hourly[4],  # 12:00
+                'today_6pm' : today_hourly[6],  # 18:00
+                'tomorrow_12am': tomorrow_hourly[0],  # 22:00
+                'tomorrow_6am' : tomorrow_hourly[2],  # 06:00
+                'tomorrow_12pm': tomorrow_hourly[4],  # 12:00
+                'tomorrow_6pm' : tomorrow_hourly[6],  # 18:00
+            }
+
+            current_hour = datetime.now().hour
+
+            if current_hour >= 17
+
 
             noon_data = next((h for h in today_hourly if h['time'] == '1200'), today_hourly[4])
             five_pm_data = next((h for h in today_hourly if h['time'] == '1700'), today_hourly[5])
