@@ -9,7 +9,7 @@ from tkinter import ttk
 import feedparser
 import requests
 from gtts import gTTS
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 # --- CONFIGURATION & PATHS ---
@@ -133,7 +133,10 @@ class SmartAlarmApp:
         self.cached_headlines_url = None
         self.cached_daily_url = None
         self.cached_weather_report = ""
+        self.card_vals = [tk.StringVar(value="--") for _ in range(8)]
 
+        # Fetch initial weather data on startup in the background
+        threading.Thread(target=self.fetch_and_update_weather, daemon=True).start()
         self.setup_ui()
         self.update_clock_loop()
         self.wake_screen()
@@ -154,21 +157,76 @@ class SmartAlarmApp:
         )
         self.next_alarm_label.pack(pady=(0, 5))
 
+
+
         # ----------------------------------------------------
-        # HOURLY WEATHER CARDS DISPLAY (Hidden on startup)
+        # HOURLY WEATHER CARDS DISPLAY 
         # ----------------------------------------------------
         self.weather_cards_frame = tk.Frame(self.main_frame, bg="black")
+        self.weather_cards_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        self.now_card_val = tk.StringVar(value="Now: --°")
-        self.noon_card_val = tk.StringVar(value="12 PM: --°")
-        self.five_card_val = tk.StringVar(value="5 PM: --°")
+        # ==========================================
+        # ROW 1: TODAY'S WEATHER
+        # ==========================================
+        today_label = tk.Label(
+            self.weather_cards_frame,
+            text=f"TODAY ({datetime.now().strftime('%A, %b %d')})",
+            font=("Helvetica", 12, "bold"),
+            fg="white",
+            bg="black",
+            anchor="w",
+        )
+        today_label.pack(fill="x", pady=(0, 5))
 
-        for title, var in [("Now", self.now_card_val), ("12 PM", self.noon_card_val), ("5 PM", self.five_card_val)]:
-            card = tk.Frame(self.weather_cards_frame, bg="#1E1E1E", relief="ridge", bd=1, padx=10, pady=5)
-            card.pack(side="left", padx=6)
+        today_row = tk.Frame(self.weather_cards_frame, bg="black")
+        today_row.pack(fill="x", pady=(0, 15))  # Space before tomorrow's row
 
-            lbl = tk.Label(card, textvariable=var, font=("Helvetica", 12, "bold"), fg="#81D4FA", bg="#1E1E1E")
-            lbl.pack()
+        # Cards 0 through 3 (Today)
+        for i in range(4):
+            card = tk.Label(
+                today_row,
+                textvariable=self.card_vals[i],
+                font=("Helvetica", 12),
+                fg="white",
+                bg="#222222",  # Dark card background
+                padx=10,
+                pady=10,
+                relief="flat",
+            )
+            card.pack(side="left", expand=True, fill="both", padx=4)
+
+        # ==========================================
+        # ROW 2: TOMORROW'S WEATHER
+        # ==========================================
+        tomorrow_label = tk.Label(
+            self.weather_cards_frame,
+            text=f"TOMORROW ({(datetime.now() + timedelta(days=1)).strftime('%A, %b %d')})",
+            font=("Helvetica", 12, "bold"),
+            fg="white",
+            bg="black",
+            anchor="w",
+        )
+        tomorrow_label.pack(fill="x", pady=(0, 5))
+
+        tomorrow_row = tk.Frame(self.weather_cards_frame, bg="black")
+        tomorrow_row.pack(fill="x")
+
+        # Cards 4 through 7 (Tomorrow)
+        for i in range(4, 8):
+            card = tk.Label(
+                tomorrow_row,
+                textvariable=self.card_vals[i],
+                font=("Helvetica", 12),
+                fg="#aaaaaa",  # Slightly muted color for tomorrow
+                bg="#222222",
+                padx=10,
+                pady=10,
+                relief="flat",
+            )
+            card.pack(side="left", expand=True, fill="both", padx=4)
+
+
+
 
         # Currently Playing Status Indicator
         self.routine_status_label = tk.Label(
@@ -307,7 +365,7 @@ class SmartAlarmApp:
             pass
 
     def dim_screen(self):
-        if not self.alarm_running and not self.routine_running:
+        if not self.alarm_running and not self.routine_running and (datetime.now().hour <= 6 or datetime.now().hour >= 22) and self.alarm_enabled:
             self.set_brightness(6)
 
     def wake_screen(self, event=None):
@@ -423,71 +481,151 @@ class SmartAlarmApp:
     # ==========================================
     # WEATHER BRIEFING & UI CARDS
     # ==========================================
-    def fetch_and_update_weather(self, location="Raleigh"):
+
+    def should_generate_spoken_report(self):
+        """
+        Returns True ONLY if:
+        1. Alarm is enabled
+        2. Alarm time is set
+        3. The alarm will go off within the next 60 minutes
+        """
+        # 1. Check if alarm toggle is ON
+        if not self.alarm_enabled:  # Adjust variable name to match your code
+            return False
+        now = datetime.now()
+        
+        # 2. Parse your stored alarm time (e.g., self.alarm_time = "07:30")
+        try:
+            alarm_hour, alarm_minute = map(int, self.alarm_time_str.split(":"))
+        except (ValueError, AttributeError):
+            return False  # Invalid or unset alarm time
+        # Build today's alarm target datetime
+        alarm_dt = now.replace(hour=alarm_hour, minute=alarm_minute, second=0, microsecond=0)
+        # If the alarm time today has already passed (e.g., it's 11 PM and alarm is 7 AM),
+        # then the active alarm is for tomorrow morning.
+        if alarm_dt < now:
+            alarm_dt += timedelta(days=1)
+        # 3. Calculate time difference in minutes
+        time_until_alarm = (alarm_dt - now).total_seconds() / 60.0
+        # Returns True if alarm is between 0 and 60 minutes away
+        return 0 <= time_until_alarm <= 60
+
+    def fetch_and_update_weather(self, location="Raleigh,NC"):
         """Fetches hourly weather data, populates UI boxes, and constructs spoken report."""
+        def format_time(hour):
+            h = hour % 24
+            if h == 0:
+                return "Midnight:"
+            if h == 12:
+                return "Noon:"
+            
+            period = "AM" if h < 12 else "PM"
+            display_hour = h if h <= 12 else h - 12
+            return f"{display_hour} {period}:"
         try:
             url = f"https://wttr.in/{location}?format=j1"
             res = requests.get(url, timeout=6).json()
 
-            current_temp = res['current_condition'][0]['temp_F']
-            current_desc = res['current_condition'][0]['weatherDesc'][0]['value']
+            current_condition = res['current_condition'][0]
 
-            today_hourly = res['weather'][0]['hourly']
-            tomorrow_hourly = res['weather'][1]['hourly']
-            self.weather_cache = {
-                'today_6am' : today_hourly[2],  # 06:00
-                'today_12pm': today_hourly[4],  # 12:00
-                'today_6pm' : today_hourly[6],  # 18:00
-                'tomorrow_12am': tomorrow_hourly[0],  # 22:00
-                'tomorrow_6am' : tomorrow_hourly[2],  # 06:00
-                'tomorrow_12pm': tomorrow_hourly[4],  # 12:00
-                'tomorrow_6pm' : tomorrow_hourly[6],  # 18:00
-            }
+            hourly_forecast = (res['weather'][0]['hourly'] + res['weather'][1]['hourly'])
 
             current_hour = datetime.now().hour
 
-            if current_hour >= 17
+            card_data = []
+            ''' This will create a table of the next 48 hours of weather at 3 hour increments. The times correspond as follows:
+                Index 0: Now
+                Index 1: 3 AM
+                Index 2: 6 AM
+                Index 3: 9 AM
+                Index 4: Noon
+                Index 5: 3 PM
+                Index 6: 6 PM
+                Index 7: 9 PM
+                Index 8: Midnight
+                Index 9: 3 AM (next day)
+                Index 10: 6 AM (next day)
+                Index 11: 9 AM (next day)
+                Index 12: Noon (next day)
+                Index 13: 3 PM (next day)
+                Index 14: 6 PM (next day)
+                Index 15: 9 PM (next day)
+            '''
 
-
-            noon_data = next((h for h in today_hourly if h['time'] == '1200'), today_hourly[4])
-            five_pm_data = next((h for h in today_hourly if h['time'] == '1700'), today_hourly[5])
-
-            noon_temp = noon_data['tempF']
-            noon_desc = noon_data['weatherDesc'][0]['value']
-
-            five_pm_temp = five_pm_data['tempF']
-            five_pm_desc = five_pm_data['weatherDesc'][0]['value']
-
-            # Update Screen Boxes
-            self.root.after(0, lambda: self.now_card_val.set(f"Now: {current_temp}° {current_desc}"))
-            self.root.after(0, lambda: self.noon_card_val.set(f"12 PM: {noon_temp}° {noon_desc}"))
-            self.root.after(0, lambda: self.five_card_val.set(f"5 PM: {five_pm_temp}° {five_pm_desc}"))
-
-            # Check for non-sunny conditions across the full day
-            adverse_conditions = []
-            for slot in today_hourly:
-                desc = slot['weatherDesc'][0]['value'].lower()
-                time_hr = int(slot['time']) // 100
-
-                if any(w in desc for w in ['rain', 'shower', 'thunder', 'storm', 'snow', 'drizzle']):
-                    time_fmt = f"{time_hr} AM" if time_hr < 12 else (f"{time_hr - 12} PM" if time_hr > 12 else "12 PM")
-                    adverse_conditions.append(f"{slot['weatherDesc'][0]['value']} around {time_fmt}")
-
-            # Build spoken text report
-            report = (
-                f"Good morning! Here is your daily weather forecast for {location}. "
-                f"Right now, it is {current_desc} and {current_temp} degrees. "
-                f"At noon, expect {noon_desc} and {noon_temp} degrees. "
-                f"By 5 PM, it will be {five_pm_desc} and {five_pm_temp} degrees. "
-            )
-
-            if adverse_conditions:
-                unique_warnings = list(dict.fromkeys(adverse_conditions))[:3]
-                report += f"Take note: inclement weather is expected today with {', '.join(unique_warnings)}."
+            if current_hour <= 12:
+                card_data.append(current_condition)
+                card_data.append(hourly_forecast[4])
+                card_data.append(hourly_forecast[6])
+                card_data.append(hourly_forecast[8])
+                todays_times = ["Now", format_time(12), format_time(18), format_time(0)]
             else:
-                report += "Clear and sunny conditions are expected throughout the rest of the day."
+                next_hour = ((current_hour // 3) + 1) * 3
+                next_index = next_hour // 3
+                card_data.append(current_condition)
+                card_data.append(hourly_forecast[next_index])
+                card_data.append(hourly_forecast[next_index + 1])
+                card_data.append(hourly_forecast[next_index + 2])
+                todays_times = ["Now", format_time(next_hour), format_time(next_hour + 3), format_time(next_hour + 6)]
+            
+            card_data.append(hourly_forecast[10])
+            card_data.append(hourly_forecast[12])
+            card_data.append(hourly_forecast[14])
+            card_data.append(hourly_forecast[15])
+            tomorrows_times = [format_time(6), format_time(12), format_time(18), format_time(21)]
 
-            self.cached_weather_report = report
+
+            for i in range(8):
+                slot = card_data[i]
+                if i == 0:
+                    time_str = "Now"
+                else:
+                    # Check if 'time' key exists; default to 0 if missing
+                    raw_time = int(slot.get('time', 0)) // 100
+                    time_str = format_time(raw_time)
+
+                temp = slot.get("temp_F") or slot.get("tempF", "--")
+                desc = slot.get("weatherDesc", [{}])[0].get("value", "Unknown")
+                rain_chance = int(slot.get("chanceofrain", 0))
+
+                if rain_chance > 0:
+                    rain_str = f" ({rain_chance}% rain)"
+                else:
+                    rain_str = ""
+                card_text = f"---{time_str}---\n {temp}°F\n{desc}{rain_str}"
+
+                self.root.after(0, lambda v=self.card_vals[i], t=card_text: v.set(t))
+
+
+            if self.should_generate_spoken_report():
+                print("[INFO] Alarm is within 1 hour. Generating spoken report...")
+                # Check for non-sunny conditions across the full day
+                adverse_conditions = []
+                for slot in hourly_forecast:
+                    desc = slot['weatherDesc'][0]['value'].lower()
+                    time_hr = int(slot['time']) // 100
+
+                    if any(w in desc for w in ['rain', 'shower', 'thunder', 'storm', 'snow', 'drizzle']):
+                        time_fmt = f"{time_hr} AM" if time_hr < 12 else (f"{time_hr - 12} PM" if time_hr > 12 else "12 PM")
+                        adverse_conditions.append(f"{slot['weatherDesc'][0]['value']} around {time_fmt}")
+
+                # Build spoken text report
+                report = (
+                    f"Good morning! Here is your daily weather forecast for {location}. "
+                    f"Right now, it is {card_data[0]['weatherDesc'][0]['value']} and {card_data[0].get('temp_F', '--')} degrees. "
+                    f"At {format_time(int(card_data[1]['time']) // 100)}, expect {card_data[1]['weatherDesc'][0]['value']} and {card_data[1].get('temp_F', '--')} degrees. "
+                    f"By {format_time(int(card_data[2]['time']) // 100)}, it will be {card_data[2]['weatherDesc'][0]['value']} and {card_data[2].get('temp_F', '--')} degrees. "
+                )
+
+                if adverse_conditions:
+                    unique_warnings = list(dict.fromkeys(adverse_conditions))[:3]
+                    report += f"Take note: inclement weather is expected today with {', '.join(unique_warnings)}."
+                else:
+                    report += "Clear and sunny conditions are expected throughout the rest of the day."
+
+                self.cached_weather_report = report
+
+            else:
+                print("[INFO] Alarm not within 1 hour. Skipping spoken report.")
 
         except Exception as e:
             print(f"Weather error: {e}")
@@ -500,7 +638,7 @@ class SmartAlarmApp:
         if not self.cached_weather_report:
             self.fetch_and_update_weather()
 
-    # ONLY generate if the file doesn't exist yet
+        # ONLY generate if the file doesn't exist yet
         if not os.path.exists(tts_file):
             print("[TTS] Generating new weather audio file...")
             tts = gTTS(text=self.cached_weather_report, lang="en", tld="com")
