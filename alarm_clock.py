@@ -219,31 +219,17 @@ class SmartAlarmApp:
 
     def setup_ui(self):
         self.main_frame = tk.Frame(self.root, bg="black")
-        self.main_frame.pack(expand=True, fill="both", padx=15, pady=10)
 
         # Main Digital Clock Display
-        self.clock_label = tk.Label(
-            self.main_frame, text="", font=("Helvetica", 54, "bold"), fg="white", bg="black"
-        )
-        self.clock_label.pack(pady=(5, 0))
+        self.clock_label = tk.Label(self.main_frame, text="", font=("Helvetica", 54, "bold"), fg="white", bg="black")
 
         # Status / Next Alarm Label
-        self.next_alarm_label = tk.Label(
-            self.main_frame, text="Alarm Off", font=("Helvetica", 14), fg="gray", bg="black"
-        )
-        self.next_alarm_label.pack(pady=(0, 5))
-
-
+        self.next_alarm_label = tk.Label(self.main_frame, text="Alarm Off", font=("Helvetica", 14), fg="gray", bg="black")
 
         # ----------------------------------------------------
         # HOURLY WEATHER CARDS DISPLAY 
         # ----------------------------------------------------
         self.weather_cards_frame = tk.Frame(self.main_frame, bg="black")
-        self.weather_cards_frame.pack(fill="both", expand=False, padx=10, pady=10)
-
-        # ==========================================
-        # ROW 1: TODAY'S WEATHER
-        # ==========================================
         today_label = tk.Label(
             self.weather_cards_frame,
             text=f"TODAY ({datetime.now().strftime('%A, %b %d')})",
@@ -252,28 +238,22 @@ class SmartAlarmApp:
             bg="black",
             anchor="w",
         )
-        today_label.pack(fill="x", pady=(0, 5))
-
         today_row = tk.Frame(self.weather_cards_frame, bg="black")
-        today_row.pack(fill="x", pady=(0, 5))  # Space before tomorrow's row
 
-        # Cards 0 through 3 (Today)
+        cards = []
         for i in range(4):
             card = tk.Label(
                 today_row,
                 textvariable=self.card_vals[i],
                 font=("Helvetica", 10),
                 fg="white",
-                bg="#222222",  # Dark card background
+                bg="#222222",
                 padx=2,
                 pady=2,
                 relief="flat",
             )
-            card.pack(side="left", expand=True, fill="both", padx=4)
+            cards.append(card)
 
-        # ==========================================
-        # ROW 2: TOMORROW'S WEATHER
-        # ==========================================
         tomorrow_label = tk.Label(
             self.weather_cards_frame,
             text=f"TOMORROW ({(datetime.now() + timedelta(days=1)).strftime('%A, %b %d')})",
@@ -282,12 +262,7 @@ class SmartAlarmApp:
             bg="black",
             anchor="w",
         )
-        tomorrow_label.pack(fill="x", pady=(0, 5))
-
         tomorrow_row = tk.Frame(self.weather_cards_frame, bg="black")
-        tomorrow_row.pack(fill="x", pady=(0, 5))
-
-        # Cards 4 through 7 (Tomorrow)
         for i in range(4, 8):
             card = tk.Label(
                 tomorrow_row,
@@ -299,58 +274,38 @@ class SmartAlarmApp:
                 pady=2,
                 relief="flat",
             )
-            card.pack(side="left", expand=True, fill="both", padx=4)
+            cards.append(card)
 
         # Currently Playing Status Indicator
-        self.routine_status_label = tk.Label(
-            self.main_frame, text="", font=("Helvetica", 18, "bold"), fg="#64B5F6", bg="black"
-        )
-        self.routine_status_label.pack(pady=(5, 0))
+        self.routine_status_label = tk.Label(self.main_frame, text="", font=("Helvetica", 18, "bold"), fg="#64B5F6", bg="black")
         # "Up Next" Queue Preview Label
-        self.up_next_label = tk.Label(
-            self.main_frame, text="", font=("Helvetica", 14, "italic"), fg="#FFA726", bg="black"
-        )
-        self.up_next_label.pack(pady=(2, 0))
-
+        self.up_next_label = tk.Label(self.main_frame, text="", font=("Helvetica", 14, "italic"), fg="#FFA726", bg="black")
         # Routine Control Bar (Pause / Play / Skip / End)
         self.routine_controls_frame = tk.Frame(self.main_frame, bg="black")
-        self.routine_controls_frame.columnconfigure((0, 1, 2, 3), weight=1, uniform="routine_btns")
 
+        self.routine_controls_frame.columnconfigure((0, 1, 2, 3), weight=1, uniform="routine_btns")
         self.pause_btn = tk.Button(
             self.routine_controls_frame, text="⏸ Pause", font=("Helvetica", 12, "bold"),
             bg="#333333", fg="white", activebackground="#555555", activeforeground="white",
             pady=2, command=self.pause_routine_step
         )
-        self.pause_btn.grid(row=0, column=0, padx=8, sticky="ew")
-
         self.play_btn = tk.Button(
             self.routine_controls_frame, text="▶ Play", font=("Helvetica", 12, "bold"),
             bg="#2E7D32", fg="white", activebackground="#4CAF50", activeforeground="white",
             pady=2, command=self.resume_routine_step
         )
-        self.play_btn.grid(row=0, column=1, padx=8, sticky="ew")
-
         self.skip_btn = tk.Button(
             self.routine_controls_frame, text="⏭ Skip", font=("Helvetica", 12, "bold"),
             bg="#0288D1", fg="white", activebackground="#03A9F4", activeforeground="white",
             pady=2, command=self.skip_routine_step
         )
-
         self.end_btn = tk.Button(
             self.routine_controls_frame, text="End Routine", font=("Helvetica", 12, "bold"),
             bg="#D32F2F", fg="white", activebackground="#F44336", activeforeground="white",
             pady=2, command=self.end_routine
         )
-
-
-        self.skip_btn.grid(row=0, column=2, padx=8, sticky="ew")
-
-        self.end_btn.grid(row=0, column=3, padx=8, sticky="ew")
-
         # Controls Container Frame
         self.controls_frame = tk.Frame(self.main_frame, bg="black")
-        self.controls_frame.pack(pady=1)
-
         self.time_entry_var = tk.StringVar(value=self.alarm_time_str)
         self.time_entry = tk.Label(
             self.controls_frame,
@@ -359,25 +314,17 @@ class SmartAlarmApp:
             fg="#81C784", bg="#222222",
             padx=12, pady=4, relief="ridge", bd=2, cursor="hand2"
         )
-        self.time_entry.grid(row=0, column=0, padx=8)
-        self.time_entry.bind("<Button-1>", self.open_numpad)
-
         self.toggle_btn = tk.Button(
             self.controls_frame, text="Enable Alarm", font=("Helvetica", 13),
             command=self.toggle_alarm, bg="#333333", fg="white", width=12
         )
-        self.toggle_btn.grid(row=0, column=1, padx=8)
-
         self.sound_var = tk.StringVar()
         self.refresh_sound_list()
         self.sound_dropdown = ttk.OptionMenu(
             self.controls_frame, self.sound_var, self.sound_var.get(), *self.available_sounds
         )
-        self.sound_dropdown.grid(row=1, column=0, columnspan=2, pady=2, sticky="ew")
-
         # Action Buttons Container
         self.actions_frame = tk.Frame(self.main_frame, bg="black")
-        self.actions_frame.pack(fill="x", pady=5)
 
         self.dismiss_btn = tk.Button(
             self.actions_frame, text="STOP ALARM & START ROUTINE", font=("Helvetica", 16, "bold"),
@@ -390,6 +337,52 @@ class SmartAlarmApp:
             fg="#555555", bg="black", activeforeground="white", activebackground="black",
             bd=0, command=self.close_app
         )
+
+
+
+
+        
+
+
+
+        self.clock_label.pack(pady=(5, 0))
+        self.next_alarm_label.pack(pady=(0, 5))
+        self.main_frame.pack(expand=True, fill="both", padx=15, pady=10)
+        self.weather_cards_frame.pack(fill="both", expand=False, padx=10, pady=10)
+        today_label.pack(fill="x", pady=(0, 5))
+        today_row.pack(fill="x", pady=(0, 5))  # Space before tomorrow's row
+
+        # Cards 0 through 3 (Today)
+        for i in range(4):
+            cards[i].pack(side="left", expand=True, fill="both", padx=4)
+
+        tomorrow_label.pack(fill="x", pady=(0, 5))
+        tomorrow_row.pack(fill="x", pady=(0, 5))
+
+        # Cards 4 through 7 (Tomorrow)
+        for i in range(4,8):
+            cards[i].pack(side="left", expand=True, fill="both", padx=4)
+
+        self.routine_status_label.pack(pady=(5, 0))
+        self.up_next_label.pack(pady=(2, 0))
+
+        self.pause_btn.grid(row=0, column=0, padx=8, sticky="ew")
+        self.play_btn.grid(row=0, column=1, padx=8, sticky="ew")
+        self.skip_btn.grid(row=0, column=2, padx=8, sticky="ew")
+        self.end_btn.grid(row=0, column=3, padx=8, sticky="ew")
+
+        self.controls_frame.pack(pady=1)
+
+        self.time_entry.grid(row=0, column=0, padx=8)
+        self.time_entry.bind("<Button-1>", self.open_numpad)
+        self.toggle_btn.grid(row=0, column=1, padx=8)
+
+        self.sound_dropdown.grid(row=1, column=0, columnspan=2, pady=2, sticky="ew")
+
+
+        self.actions_frame.pack(fill="x", pady=5)
+
+
         self.exit_btn.place(relx=1.0, rely=0.0, anchor="ne")
 
     def open_numpad(self, event=None):
@@ -973,18 +966,44 @@ class SmartAlarmApp:
 
         # Routine complete cleanup
         self.root.after(0, self.cleanup_routine_ui)
-
-    def cleanup_routine_ui(self):
-        self.routine_controls_frame.pack_forget()
+    def reset_to_default_view(self):
+        # 1. UNPACK EVERYTHING (Clears Tkinter's internal memory stack)
+        self.controls_frame.pack_forget()
+        self.weather_cards_frame.pack_forget()
         self.routine_status_label.pack_forget()
         self.up_next_label.pack_forget()
+        self.routine_controls_frame.pack_forget()
+        self.dismiss_btn.pack_forget()
 
-        self.routine_status_label = tk.Label(
-            self.main_frame, text="", font=("Helvetica", 18, "bold"), fg="#64B5F6", bg="black"
-        )
-        self.routine_status_label.pack(pady=(5, 0))
+        # 2. CLEAR ROUTINE TEXT
+        self.routine_status_label.config(text="")
+        self.up_next_label.config(text="")
 
-        self.controls_frame.pack(pady=2)
+        # 3. REPACK IN STRICT TOP-TO-BOTTOM ORDER
+        # (self.clock_label and self.next_alarm_label stay static at the top)
+        
+        # Weather Cards directly below the clock status
+        self.weather_cards_frame.pack(fill="x", expand=False, padx=10, pady=5)
+        
+        # Alarm Time & Controls directly below the weather cards
+        self.controls_frame.pack(pady=5)
+
+    def show_routine_view(self):
+            """Switches layout to active Routine Mode."""
+            # Unpack default alarm controls
+            self.controls_frame.pack_forget()
+            self.dismiss_btn.pack_forget()
+
+            # Pack Weather -> Status Labels -> Media Controls Bar
+            self.weather_cards_frame.pack(fill="x", expand=False, padx=10, pady=5)
+            self.routine_status_label.pack(pady=(5, 0))
+            self.up_next_label.pack(pady=(2, 0))
+            self.routine_controls_frame.pack(side="bottom", fill="x", padx=15, pady=5)
+
+    def cleanup_routine_ui(self):
+        self.stop_all_audio()
+        self.routine_running = False
+        self.reset_to_default_view()
 
         self.pause_btn.config(bg="#333333")
         self.play_btn.config(bg="#2E7D32")
