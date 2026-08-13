@@ -226,6 +226,33 @@ class SmartAlarmApp:
         # Status / Next Alarm Label
         self.next_alarm_label = tk.Label(self.main_frame, text="Alarm Off", font=("Helvetica", 14), fg="gray", bg="black")
 
+        self.make_weather_cards()
+
+        # Currently Playing Status Indicator
+        self.routine_status_label = tk.Label(self.main_frame, text="", font=("Helvetica", 18, "bold"), fg="#64B5F6", bg="black")
+        # "Up Next" Queue Preview Label
+        self.up_next_label = tk.Label(self.main_frame, text="", font=("Helvetica", 14, "italic"), fg="#FFA726", bg="black")
+
+        self.make_routine_controls()
+        self.make_controls_container_frame()
+
+        # Action Buttons Container
+        self.actions_frame = tk.Frame(self.main_frame, bg="black")
+        self.dismiss_btn = tk.Button(
+            self.actions_frame, text="STOP ALARM & START ROUTINE", font=("Helvetica", 16, "bold"),
+            bg="#D32F2F", fg="white", command=self.dismiss_alarm, height=2
+        )
+        # Exit Button
+        self.exit_btn = tk.Button(
+            self.main_frame, text="✕", font=("Helvetica", 14, "bold"),
+            fg="#555555", bg="black", activeforeground="white", activebackground="black",
+            bd=0, command=self.close_app
+        )
+
+
+        self.pack_everything()
+
+    def make_weather_cards(self):
         # ----------------------------------------------------
         # HOURLY WEATHER CARDS DISPLAY 
         # ----------------------------------------------------
@@ -275,32 +302,6 @@ class SmartAlarmApp:
                 relief="flat",
             )
             self.cards.append(card)
-
-        # Currently Playing Status Indicator
-        self.routine_status_label = tk.Label(self.main_frame, text="", font=("Helvetica", 18, "bold"), fg="#64B5F6", bg="black")
-        # "Up Next" Queue Preview Label
-        self.up_next_label = tk.Label(self.main_frame, text="", font=("Helvetica", 14, "italic"), fg="#FFA726", bg="black")
-
-
-        self.make_routine_controls()
-        self.make_controls_container_frame()
-
-
-        # Action Buttons Container
-        self.actions_frame = tk.Frame(self.main_frame, bg="black")
-        self.dismiss_btn = tk.Button(
-            self.actions_frame, text="STOP ALARM & START ROUTINE", font=("Helvetica", 16, "bold"),
-            bg="#D32F2F", fg="white", command=self.dismiss_alarm, height=2
-        )
-        # Exit Button
-        self.exit_btn = tk.Button(
-            self.main_frame, text="✕", font=("Helvetica", 14, "bold"),
-            fg="#555555", bg="black", activeforeground="white", activebackground="black",
-            bd=0, command=self.close_app
-        )
-
-
-        self.pack_everything()
 
     def make_routine_controls(self):
         # Routine Control Bar (Pause / Play / Skip / End)
