@@ -291,6 +291,7 @@ class SmartAlarmApp:
                 relief="flat",
             )
             self.cards.append(card)
+            self.cards[i].pack(side="left", expand=True, fill="both", padx=4)
 
         self.tomorrow_label = tk.Label(
             self.weather_cards_frame,
@@ -313,6 +314,7 @@ class SmartAlarmApp:
                 relief="flat",
             )
             self.cards.append(card)
+            self.cards[i].pack(side="left", expand=True, fill="both", padx=4)
 
     def make_routine_controls(self):
         # Routine Control Bar (Pause / Play / Skip / End)
@@ -409,15 +411,15 @@ class SmartAlarmApp:
         self.today_label.pack(fill="x", pady=(0, 5))
         self.today_row.pack(fill="x", pady=(0, 5))  # Space before tomorrow's row
         # Cards 0 through 3 (Today)
-        for i in range(4):
-            self.cards[i].pack(side="left", expand=True, fill="both", padx=4)
+        #for i in range(4):
+        #    self.cards[i].pack(side="left", expand=True, fill="both", padx=4)
 
         self.tomorrow_label.pack(fill="x", pady=(0, 5))
         self.tomorrow_row.pack(fill="x", pady=(0, 5))
 
         # Cards 4 through 7 (Tomorrow)
-        for i in range(4,8):
-            self.cards[i].pack(side="left", expand=True, fill="both", padx=4)
+        #for i in range(4,8):
+        #    self.cards[i].pack(side="left", expand=True, fill="both", padx=4)
 
     def unpack_weather_cards(self):
         self.weather_cards_frame.pack_forget()
@@ -575,6 +577,7 @@ class SmartAlarmApp:
                         preexec_fn=os.setsid
                     )
                     self.current_proc.wait()
+                    time.sleep(0.5)
                 else:
                     time.sleep(1)
 
@@ -702,8 +705,8 @@ class SmartAlarmApp:
 
 
             for slot in hourly_forecast:
-                desc = slot['weatherDesc'][0]['value'].lower()
-                time_hr = int(slot['time']) // 100
+                desc = slot.get('weatherDesc', [{}])[0].get('value', '').lower()
+                time_hr = int(slot.get('time', 0)) // 100
                 if any(w in desc for w in ['rain', 'shower', 'thunder', 'storm', 'snow', 'drizzle']):
                     time_fmt = f"{time_hr} AM" if time_hr < 12 else (f"{time_hr - 12} PM" if time_hr > 12 else "12 PM")
                     adverse_conditions.append(f"{slot['weatherDesc'][0]['value']} around {time_fmt}")
@@ -711,8 +714,8 @@ class SmartAlarmApp:
             report = (
                 f"Good morning! Here is your daily weather forecast for {location}. "
                 f"Right now, it is {card_data[0]['weatherDesc'][0]['value']} and {card_data[0].get('temp_F', '--')} degrees and feels like {card_data[0].get('FeelsLikeF', '--')}. "
-                f"At {format_time(int(card_data[1]['time']) // 100)}, expect {card_data[1]['weatherDesc'][0]['value']} and {card_data[1]['tempF']} degrees with a feels like of {card_data[1]['FeelsLikeF']}. "
-                f"By {format_time(int(card_data[2]['time']) // 100)}, it will be {card_data[2]['weatherDesc'][0]['value']} and {card_data[2]['tempF']} degrees with a feels like of {card_data[2]['FeelsLikeF']}. "
+                f"At {format_time(int(card_data[1]['time']) // 100)}, expect {card_data[1]['weatherDesc'][0]['value']} and {card_data[1].get('tempF', '--')} degrees with a feels like of {card_data[1].get('FeelsLikeF', '--')}. "
+                f"By {format_time(int(card_data[2]['time']) // 100)}, it will be {card_data[2]['weatherDesc'][0]['value']} and {card_data[2].get('tempF', '--')} degrees with a feels like of {card_data[2].get('FeelsLikeF', '--')}. "
             )
             if any(h > 80 for h in humidity_levels):
                 report += "Humidity levels are expected to be high today. "
@@ -903,8 +906,11 @@ class SmartAlarmApp:
                 print(f"Error playing briefing: {e}")
             finally:
                 if os.path.exists(briefing_mp3):
-                    os.remove(briefing_mp3)
-                    print("[CLEANUP] Deleted temporary briefing audio file.")
+                    try:
+                        os.remove(briefing_mp3)
+                        print("[CLEANUP] Deleted temporary briefing audio file.")
+                    except Exception as e:
+                        print(f"[CLEANUP] Failed to delete briefing audio file: {e}")
 
         # ----------------------------------------------------
         # STEP 2: NYT "The Headlines" (~10 Min News Summary)
@@ -1026,6 +1032,15 @@ class SmartAlarmApp:
 
     def cleanup_routine_ui(self):
         self.stop_all_audio()
+
+        tts_file = "/tmp/morning_briefing.mp3"
+        if os.path.exists(tts_file):
+            try:
+                os.remove(tts_file)
+            except Exception:
+                pass
+
+
         self.routine_running = False
         self.skip_requested = False
         self.is_paused = False
