@@ -250,7 +250,18 @@ class SmartAlarmApp:
         )
 
 
-        self.pack_everything()
+        self.pack_default_view()
+
+    def pack_default_view(self):
+        self.clock_label.pack(pady=(5, 0))
+        self.next_alarm_label.pack(pady=(0, 5))
+        self.main_frame.pack(expand=True, fill="both", padx=15, pady=10)
+
+        self.pack_weather_cards()
+        self.pack_controls_container()
+
+        self.actions_frame.pack(fill="x", pady=5)
+        self.exit_btn.place(relx=1.0, rely=0.0, anchor="ne")
 
     def make_weather_cards(self):
         # ----------------------------------------------------
@@ -353,10 +364,49 @@ class SmartAlarmApp:
         self.clock_label.pack(pady=(5, 0))
         self.next_alarm_label.pack(pady=(0, 5))
         self.main_frame.pack(expand=True, fill="both", padx=15, pady=10)
+
+        self.pack_weather_cards()
+
+        self.pack_routine()
+
+        self.pack_controls_container()
+
+        self.actions_frame.pack(fill="x", pady=5)
+
+        self.exit_btn.place(relx=1.0, rely=0.0, anchor="ne")
+
+    def pack_controls_container(self):
+        self.controls_frame.pack(pady=1)
+        self.time_entry.grid(row=0, column=0, padx=8)
+        self.time_entry.bind("<Button-1>", self.open_numpad)
+        self.toggle_btn.grid(row=0, column=1, padx=8)
+        self.sound_dropdown.grid(row=1, column=0, columnspan=2, pady=2, sticky="ew")
+
+    def unpack_controls_container(self):
+        self.time_entry.grid_forget()
+        self.toggle_btn.grid_forget()
+        self.sound_dropdown.grid_forget()
+
+    def pack_routine(self):
+        self.routine_status_label.pack(pady=(5, 0))
+        self.up_next_label.pack(pady=(2, 0))
+        self.pause_btn.grid(row=0, column=0, padx=8, sticky="ew")
+        self.play_btn.grid(row=0, column=1, padx=8, sticky="ew")
+        self.skip_btn.grid(row=0, column=2, padx=8, sticky="ew")
+        self.end_btn.grid(row=0, column=3, padx=8, sticky="ew")
+
+    def unpack_routine(self):
+        self.routine_status_label.pack_forget()
+        self.up_next_label.pack_forget()
+        self.pause_btn.grid_forget()
+        self.play_btn.grid_forget()
+        self.skip_btn.grid_forget()
+        self.end_btn.grid_forget()
+
+    def pack_weather_cards(self):
         self.weather_cards_frame.pack(fill="both", expand=False, padx=10, pady=10)
         self.today_label.pack(fill="x", pady=(0, 5))
         self.today_row.pack(fill="x", pady=(0, 5))  # Space before tomorrow's row
-
         # Cards 0 through 3 (Today)
         for i in range(4):
             self.cards[i].pack(side="left", expand=True, fill="both", padx=4)
@@ -368,27 +418,17 @@ class SmartAlarmApp:
         for i in range(4,8):
             self.cards[i].pack(side="left", expand=True, fill="both", padx=4)
 
-        self.routine_status_label.pack(pady=(5, 0))
-        self.up_next_label.pack(pady=(2, 0))
+    def unpack_weather_cards(self):
+        self.weather_cards_frame.pack_forget()
+        self.today_label.pack_forget()
+        self.today_row.pack_forget()
+        for i in range(4):
+            self.cards[i].pack_forget()
 
-        self.pause_btn.grid(row=0, column=0, padx=8, sticky="ew")
-        self.play_btn.grid(row=0, column=1, padx=8, sticky="ew")
-        self.skip_btn.grid(row=0, column=2, padx=8, sticky="ew")
-        self.end_btn.grid(row=0, column=3, padx=8, sticky="ew")
-
-        self.controls_frame.pack(pady=1)
-
-        self.time_entry.grid(row=0, column=0, padx=8)
-        self.time_entry.bind("<Button-1>", self.open_numpad)
-        self.toggle_btn.grid(row=0, column=1, padx=8)
-
-        self.sound_dropdown.grid(row=1, column=0, columnspan=2, pady=2, sticky="ew")
-
-
-        self.actions_frame.pack(fill="x", pady=5)
-
-
-        self.exit_btn.place(relx=1.0, rely=0.0, anchor="ne")
+        self.tomorrow_label.pack_forget()
+        self.tomorrow_row.pack_forget()
+        for i in range(4, 8):
+            self.cards[i].pack_forget()
 
     def open_numpad(self, event=None):
         numpad = TouchNumpad(self.root, initial_val=self.time_entry_var.get())
