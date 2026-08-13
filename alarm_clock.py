@@ -9,6 +9,7 @@ from tkinter import ttk
 import feedparser
 import requests
 from gtts import gTTS
+from datetime import datetime, timedelta
 
 
 # --- CONFIGURATION & PATHS ---
@@ -22,6 +23,81 @@ HEADLINES_PODCAST_RSS = "https://feeds.simplecast.com/ydACIPHO"
 
 if not os.path.exists(SOUNDS_DIR):
     os.makedirs(SOUNDS_DIR, exist_ok=True)
+
+
+WWO_CODE = {
+    "113": "Sunny",
+    "116": "PartlyCloudy",
+    "119": "Cloudy",
+    "122": "VeryCloudy",
+    "143": "Fog",
+    "176": "LightShowers",
+    "179": "LightSleetShowers",
+    "182": "LightSleet",
+    "185": "LightSleet",
+    "200": "ThunderyShowers",
+    "227": "LightSnow",
+    "230": "HeavySnow",
+    "248": "Fog",
+    "260": "Fog",
+    "263": "LightShowers",
+    "266": "LightRain",
+    "281": "LightSleet",
+    "284": "LightSleet",
+    "293": "LightRain",
+    "296": "LightRain",
+    "299": "HeavyShowers",
+    "302": "HeavyRain",
+    "305": "HeavyShowers",
+    "308": "HeavyRain",
+    "311": "LightSleet",
+    "314": "LightSleet",
+    "317": "LightSleet",
+    "320": "LightSnow",
+    "323": "LightSnowShowers",
+    "326": "LightSnowShowers",
+    "329": "HeavySnow",
+    "332": "HeavySnow",
+    "335": "HeavySnowShowers",
+    "338": "HeavySnow",
+    "350": "LightSleet",
+    "353": "LightShowers",
+    "356": "HeavyShowers",
+    "359": "HeavyRain",
+    "362": "LightSleetShowers",
+    "365": "LightSleetShowers",
+    "368": "LightSnowShowers",
+    "371": "HeavySnowShowers",
+    "374": "LightSleetShowers",
+    "377": "LightSleet",
+    "386": "ThunderyShowers",
+    "389": "ThunderyHeavyRain",
+    "392": "ThunderySnowShowers",
+    "395": "HeavySnowShowers",
+}
+
+WEATHER_SYMBOL = {
+    "Unknown": "✨",
+    "Cloudy": "☁️",
+    "Fog": "🌫",
+    "HeavyRain": "🌧",
+    "HeavyShowers": "🌧",
+    "HeavySnow": "❄️",
+    "HeavySnowShowers": "❄️",
+    "LightRain": "🌦",
+    "LightShowers": "🌦",
+    "LightSleet": "🌧",
+    "LightSleetShowers": "🌧",
+    "LightSnow": "🌨",
+    "LightSnowShowers": "🌨",
+    "PartlyCloudy": "⛅️",
+    "Sunny": "☀️",
+    "ThunderyHeavyRain": "🌩",
+    "ThunderyShowers": "⛈",
+    "ThunderySnowShowers": "⛈",
+    "VeryCloudy": "☁️",
+}
+
 
 
 class TouchNumpad(tk.Toplevel):
@@ -127,88 +203,147 @@ class SmartAlarmApp:
         self.alarm_enabled = False
         self.current_proc = None
         self.skip_requested = False
+        self.end_requested = False
 
         # Pre-fetched Audio Caches & Weather
         self.cached_headlines_url = None
         self.cached_daily_url = None
         self.cached_weather_report = ""
+        self.card_vals = [tk.StringVar(value="--") for _ in range(8)]
 
+        # Fetch initial weather data on startup in the background
+        threading.Thread(target=self.fetch_and_update_weather, daemon=True).start()
         self.setup_ui()
         self.update_clock_loop()
         self.wake_screen()
 
     def setup_ui(self):
         self.main_frame = tk.Frame(self.root, bg="black")
-        self.main_frame.pack(expand=True, fill="both", padx=15, pady=10)
 
         # Main Digital Clock Display
-        self.clock_label = tk.Label(
-            self.main_frame, text="", font=("Helvetica", 54, "bold"), fg="white", bg="black"
-        )
-        self.clock_label.pack(pady=(5, 0))
+        self.clock_label = tk.Label(self.main_frame, text="", font=("Helvetica", 54, "bold"), fg="white", bg="black")
 
         # Status / Next Alarm Label
-        self.next_alarm_label = tk.Label(
-            self.main_frame, text="Alarm Off", font=("Helvetica", 14), fg="gray", bg="black"
-        )
-        self.next_alarm_label.pack(pady=(0, 5))
+        self.next_alarm_label = tk.Label(self.main_frame, text="Alarm Off", font=("Helvetica", 14), fg="gray", bg="black")
 
-        # ----------------------------------------------------
-        # HOURLY WEATHER CARDS DISPLAY (Hidden on startup)
-        # ----------------------------------------------------
-        self.weather_cards_frame = tk.Frame(self.main_frame, bg="black")
-
-        self.now_card_val = tk.StringVar(value="Now: --°")
-        self.noon_card_val = tk.StringVar(value="12 PM: --°")
-        self.five_card_val = tk.StringVar(value="5 PM: --°")
-
-        for title, var in [("Now", self.now_card_val), ("12 PM", self.noon_card_val), ("5 PM", self.five_card_val)]:
-            card = tk.Frame(self.weather_cards_frame, bg="#1E1E1E", relief="ridge", bd=1, padx=10, pady=5)
-            card.pack(side="left", padx=6)
-
-            lbl = tk.Label(card, textvariable=var, font=("Helvetica", 12, "bold"), fg="#81D4FA", bg="#1E1E1E")
-            lbl.pack()
+        self.make_weather_cards()
 
         # Currently Playing Status Indicator
-        self.routine_status_label = tk.Label(
-            self.main_frame, text="", font=("Helvetica", 18, "bold"), fg="#64B5F6", bg="black"
-        )
-        self.routine_status_label.pack(pady=(5, 0))
+        self.routine_status_label = tk.Label(self.main_frame, text="", font=("Helvetica", 18, "bold"), fg="#64B5F6", bg="black")
         # "Up Next" Queue Preview Label
-        self.up_next_label = tk.Label(
-            self.main_frame, text="", font=("Helvetica", 14, "italic"), fg="#FFA726", bg="black"
-        )
-        self.up_next_label.pack(pady=(2, 0))
+        self.up_next_label = tk.Label(self.main_frame, text="", font=("Helvetica", 14, "italic"), fg="#FFA726", bg="black")
 
-        # Routine Control Bar (Pause / Play / Skip)
+        self.make_routine_controls()
+        self.make_controls_container_frame()
+
+        # Action Buttons Container
+        self.actions_frame = tk.Frame(self.main_frame, bg="black")
+        self.dismiss_btn = tk.Button(
+            self.actions_frame, text="STOP ALARM & START ROUTINE", font=("Helvetica", 16, "bold"),
+            bg="#D32F2F", fg="white", command=self.dismiss_alarm, height=2
+        )
+        # Exit Button
+        self.exit_btn = tk.Button(
+            self.main_frame, text="✕", font=("Helvetica", 14, "bold"),
+            fg="#555555", bg="black", activeforeground="white", activebackground="black",
+            bd=0, command=self.close_app
+        )
+
+
+        self.pack_default_view()
+
+    def pack_default_view(self):
+        self.clock_label.pack(pady=(5, 0))
+        self.next_alarm_label.pack(pady=(0, 5))
+        self.main_frame.pack(expand=True, fill="both", padx=15, pady=10)
+
+        self.pack_weather_cards()
+        self.pack_controls_container()
+
+        self.actions_frame.pack(fill="x", pady=5)
+        self.exit_btn.place(relx=1.0, rely=0.0, anchor="ne")
+
+    def make_weather_cards(self):
+        # ----------------------------------------------------
+        # HOURLY WEATHER CARDS DISPLAY 
+        # ----------------------------------------------------
+        self.cards = []
+        self.weather_cards_frame = tk.Frame(self.main_frame, bg="black")
+        self.today_label = tk.Label(
+            self.weather_cards_frame,
+            text=f"TODAY ({datetime.now().strftime('%A, %b %d')})",
+            font=("Helvetica", 12, "bold"),
+            fg="white",
+            bg="black",
+            anchor="w",
+        )
+        self.today_row = tk.Frame(self.weather_cards_frame, bg="black")
+
+        for i in range(4):
+            card = tk.Label(
+                self.today_row,
+                textvariable=self.card_vals[i],
+                font=("Helvetica", 10),
+                fg="white",
+                bg="#222222",
+                padx=2,
+                pady=2,
+                relief="flat",
+            )
+            self.cards.append(card)
+            self.cards[i].pack(side="left", expand=True, fill="both", padx=4)
+
+        self.tomorrow_label = tk.Label(
+            self.weather_cards_frame,
+            text=f"TOMORROW ({(datetime.now() + timedelta(days=1)).strftime('%A, %b %d')})",
+            font=("Helvetica", 12, "bold"),
+            fg="white",
+            bg="black",
+            anchor="w",
+        )
+        self.tomorrow_row = tk.Frame(self.weather_cards_frame, bg="black")
+        for i in range(4, 8):
+            card = tk.Label(
+                self.tomorrow_row,
+                textvariable=self.card_vals[i],
+                font=("Helvetica", 10),
+                fg="#aaaaaa",  # Slightly muted color for tomorrow
+                bg="#222222",
+                padx=2,
+                pady=2,
+                relief="flat",
+            )
+            self.cards.append(card)
+            self.cards[i].pack(side="left", expand=True, fill="both", padx=4)
+
+    def make_routine_controls(self):
+        # Routine Control Bar (Pause / Play / Skip / End)
         self.routine_controls_frame = tk.Frame(self.main_frame, bg="black")
-        self.routine_controls_frame.columnconfigure((0, 1, 2), weight=1, uniform="routine_btns")
-
+        self.routine_controls_frame.columnconfigure((0, 1, 2, 3), weight=1, uniform="routine_btns")
         self.pause_btn = tk.Button(
-            self.routine_controls_frame, text="⏸ Pause", font=("Helvetica", 16, "bold"),
+            self.routine_controls_frame, text="⏸ Pause", font=("Helvetica", 12, "bold"),
             bg="#333333", fg="white", activebackground="#555555", activeforeground="white",
-            pady=12, command=self.pause_routine_step
+            pady=2, command=self.pause_routine_step
         )
-        self.pause_btn.grid(row=0, column=0, padx=8, sticky="ew")
-
         self.play_btn = tk.Button(
-            self.routine_controls_frame, text="▶ Play", font=("Helvetica", 16, "bold"),
+            self.routine_controls_frame, text="▶ Play", font=("Helvetica", 12, "bold"),
             bg="#2E7D32", fg="white", activebackground="#4CAF50", activeforeground="white",
-            pady=12, command=self.resume_routine_step
+            pady=2, command=self.resume_routine_step
         )
-        self.play_btn.grid(row=0, column=1, padx=8, sticky="ew")
-
         self.skip_btn = tk.Button(
-            self.routine_controls_frame, text="⏭ Skip", font=("Helvetica", 16, "bold"),
+            self.routine_controls_frame, text="⏭ Skip", font=("Helvetica", 12, "bold"),
             bg="#0288D1", fg="white", activebackground="#03A9F4", activeforeground="white",
-            pady=12, command=self.skip_routine_step
+            pady=2, command=self.skip_routine_step
         )
-        self.skip_btn.grid(row=0, column=2, padx=8, sticky="ew")
+        self.end_btn = tk.Button(
+            self.routine_controls_frame, text="End Routine", font=("Helvetica", 12, "bold"),
+            bg="#D32F2F", fg="white", activebackground="#F44336", activeforeground="white",
+            pady=2, command=self.end_routine
+        )
 
+    def make_controls_container_frame(self):
         # Controls Container Frame
         self.controls_frame = tk.Frame(self.main_frame, bg="black")
-        self.controls_frame.pack(pady=10)
-
         self.time_entry_var = tk.StringVar(value=self.alarm_time_str)
         self.time_entry = tk.Label(
             self.controls_frame,
@@ -217,38 +352,86 @@ class SmartAlarmApp:
             fg="#81C784", bg="#222222",
             padx=12, pady=4, relief="ridge", bd=2, cursor="hand2"
         )
-        self.time_entry.grid(row=0, column=0, padx=8)
-        self.time_entry.bind("<Button-1>", self.open_numpad)
-
         self.toggle_btn = tk.Button(
             self.controls_frame, text="Enable Alarm", font=("Helvetica", 13),
             command=self.toggle_alarm, bg="#333333", fg="white", width=12
         )
-        self.toggle_btn.grid(row=0, column=1, padx=8)
-
         self.sound_var = tk.StringVar()
         self.refresh_sound_list()
         self.sound_dropdown = ttk.OptionMenu(
             self.controls_frame, self.sound_var, self.sound_var.get(), *self.available_sounds
         )
-        self.sound_dropdown.grid(row=1, column=0, columnspan=2, pady=10, sticky="ew")
 
-        # Action Buttons Container
-        self.actions_frame = tk.Frame(self.main_frame, bg="black")
+    def pack_everything(self):
+        self.clock_label.pack(pady=(5, 0))
+        self.next_alarm_label.pack(pady=(0, 5))
+        self.main_frame.pack(expand=True, fill="both", padx=15, pady=10)
+
+        self.pack_weather_cards()
+
+        self.pack_routine()
+
+        self.pack_controls_container()
+
         self.actions_frame.pack(fill="x", pady=5)
 
-        self.dismiss_btn = tk.Button(
-            self.actions_frame, text="STOP ALARM & START ROUTINE", font=("Helvetica", 16, "bold"),
-            bg="#D32F2F", fg="white", command=self.dismiss_alarm, height=2
-        )
-
-        # Exit Button
-        self.exit_btn = tk.Button(
-            self.main_frame, text="✕", font=("Helvetica", 14, "bold"),
-            fg="#555555", bg="black", activeforeground="white", activebackground="black",
-            bd=0, command=self.close_app
-        )
         self.exit_btn.place(relx=1.0, rely=0.0, anchor="ne")
+
+    def pack_controls_container(self):
+        self.controls_frame.pack(pady=1)
+        self.time_entry.grid(row=0, column=0, padx=8)
+        self.time_entry.bind("<Button-1>", self.open_numpad)
+        self.toggle_btn.grid(row=0, column=1, padx=8)
+        self.sound_dropdown.grid(row=1, column=0, columnspan=2, pady=2, sticky="ew")
+    ## This upack function my be redundant, stupid, or both
+    def unpack_controls_container(self):
+        self.time_entry.grid_forget()
+        self.toggle_btn.grid_forget()
+        self.sound_dropdown.grid_forget()
+
+    def pack_routine(self):
+        self.routine_status_label.pack(pady=(0, 0))
+        self.up_next_label.pack(pady=(2, 2))
+        self.pause_btn.grid(row=0, column=0, padx=8, sticky="ew")
+        self.play_btn.grid(row=0, column=1, padx=8, sticky="ew")
+        self.skip_btn.grid(row=0, column=2, padx=8, sticky="ew")
+        self.end_btn.grid(row=0, column=3, padx=8, sticky="ew")
+        self.routine_controls_frame.pack()
+
+    def unpack_routine(self):
+        self.routine_status_label.pack_forget()
+        self.up_next_label.pack_forget()
+        self.pause_btn.grid_forget()
+        self.play_btn.grid_forget()
+        self.skip_btn.grid_forget()
+        self.end_btn.grid_forget()
+
+    def pack_weather_cards(self):
+        self.weather_cards_frame.pack(fill="both", expand=False, padx=10, pady=10)
+        self.today_label.pack(fill="x", pady=(0, 5))
+        self.today_row.pack(fill="x", pady=(0, 5))  # Space before tomorrow's row
+        # Cards 0 through 3 (Today)
+        #for i in range(4):
+        #    self.cards[i].pack(side="left", expand=True, fill="both", padx=4)
+
+        self.tomorrow_label.pack(fill="x", pady=(0, 5))
+        self.tomorrow_row.pack(fill="x", pady=(0, 5))
+
+        # Cards 4 through 7 (Tomorrow)
+        #for i in range(4,8):
+        #    self.cards[i].pack(side="left", expand=True, fill="both", padx=4)
+
+    def unpack_weather_cards(self):
+        self.weather_cards_frame.pack_forget()
+        self.today_label.pack_forget()
+        self.today_row.pack_forget()
+        for i in range(4):
+            self.cards[i].pack_forget()
+
+        self.tomorrow_label.pack_forget()
+        self.tomorrow_row.pack_forget()
+        for i in range(4, 8):
+            self.cards[i].pack_forget()
 
     def open_numpad(self, event=None):
         numpad = TouchNumpad(self.root, initial_val=self.time_entry_var.get())
@@ -306,7 +489,7 @@ class SmartAlarmApp:
             pass
 
     def dim_screen(self):
-        if not self.alarm_running and not self.routine_running:
+        if not self.alarm_running and not self.routine_running and (datetime.now().hour <= 6 or datetime.now().hour >= 22) and self.alarm_enabled:
             self.set_brightness(6)
 
     def wake_screen(self, event=None):
@@ -379,6 +562,7 @@ class SmartAlarmApp:
         self.controls_frame.pack_forget()
         self.next_alarm_label.config(text="WAKE UP!", fg="yellow")
         self.dismiss_btn.pack(expand=True, fill="both", side="bottom", pady=10)
+        
 
         sound_file = os.path.join(SOUNDS_DIR, self.sound_var.get())
 
@@ -393,6 +577,7 @@ class SmartAlarmApp:
                         preexec_fn=os.setsid
                     )
                     self.current_proc.wait()
+                    time.sleep(0.5)
                 else:
                     time.sleep(1)
 
@@ -415,6 +600,7 @@ class SmartAlarmApp:
         self.stop_all_audio()
 
         self.dismiss_btn.pack_forget()
+        self.actions_frame.pack_forget()
         self.toggle_alarm()
 
         threading.Thread(target=self.run_morning_routine, daemon=True).start()
@@ -422,55 +608,122 @@ class SmartAlarmApp:
     # ==========================================
     # WEATHER BRIEFING & UI CARDS
     # ==========================================
-    def fetch_and_update_weather(self, location="Raleigh"):
+    def fetch_and_update_weather(self, location="Raleigh,NC"):
         """Fetches hourly weather data, populates UI boxes, and constructs spoken report."""
+        def format_time(hour):
+            h = hour % 24
+            if h == 0:
+                return "Midnight"
+            if h == 12:
+                return "Noon"
+            
+            period = "AM" if h < 12 else "PM"
+            display_hour = h if h <= 12 else h - 12
+            return f"{display_hour} {period}"
         try:
             url = f"https://wttr.in/{location}?format=j1"
             res = requests.get(url, timeout=6).json()
 
-            current_temp = res['current_condition'][0]['temp_F']
-            current_desc = res['current_condition'][0]['weatherDesc'][0]['value']
+            current_condition = res['current_condition'][0]
 
-            today_hourly = res['weather'][0]['hourly']
+            hourly_forecast = (res['weather'][0]['hourly'] + res['weather'][1]['hourly'])
 
-            noon_data = next((h for h in today_hourly if h['time'] == '1200'), today_hourly[4])
-            five_pm_data = next((h for h in today_hourly if h['time'] == '1700'), today_hourly[5])
+            current_hour = datetime.now().hour
 
-            noon_temp = noon_data['tempF']
-            noon_desc = noon_data['weatherDesc'][0]['value']
+            card_data = []
+            ''' This will create a table of the next 48 hours of weather at 3 hour increments. The times correspond as follows:
+                Index 0: Now
+                Index 1: 3 AM
+                Index 2: 6 AM
+                Index 3: 9 AM
+                Index 4: Noon
+                Index 5: 3 PM
+                Index 6: 6 PM
+                Index 7: 9 PM
+                Index 8: Midnight
+                Index 9: 3 AM (next day)
+                Index 10: 6 AM (next day)
+                Index 11: 9 AM (next day)
+                Index 12: Noon (next day)
+                Index 13: 3 PM (next day)
+                Index 14: 6 PM (next day)
+                Index 15: 9 PM (next day)
+            '''
 
-            five_pm_temp = five_pm_data['tempF']
-            five_pm_desc = five_pm_data['weatherDesc'][0]['value']
+            if current_hour <= 12:
+                card_data.append(current_condition)
+                card_data.append(hourly_forecast[4])
+                card_data.append(hourly_forecast[6])
+                card_data.append(hourly_forecast[8])
+                todays_times = ["Now", format_time(12), format_time(18), format_time(0)]
+            else:
+                next_hour = ((current_hour // 3) + 1) * 3
+                next_index = next_hour // 3
+                card_data.append(current_condition)
+                card_data.append(hourly_forecast[next_index])
+                card_data.append(hourly_forecast[next_index + 1])
+                card_data.append(hourly_forecast[next_index + 2])
+                todays_times = ["Now", format_time(next_hour), format_time(next_hour + 3), format_time(next_hour + 6)]
+            
+            card_data.append(hourly_forecast[10])
+            card_data.append(hourly_forecast[12])
+            card_data.append(hourly_forecast[14])
+            card_data.append(hourly_forecast[15])
+            tomorrows_times = [format_time(6), format_time(12), format_time(18), format_time(21)]
 
-            # Update Screen Boxes
-            self.root.after(0, lambda: self.now_card_val.set(f"Now: {current_temp}° {current_desc}"))
-            self.root.after(0, lambda: self.noon_card_val.set(f"12 PM: {noon_temp}° {noon_desc}"))
-            self.root.after(0, lambda: self.five_card_val.set(f"5 PM: {five_pm_temp}° {five_pm_desc}"))
+            
+
+            for i in range(8):
+                slot = card_data[i]
+                if i == 0:
+                    time_str = "Now"
+                else:
+                    # Check if 'time' key exists; default to 0 if missing
+                    raw_time = int(slot.get('time', 0)) // 100
+                    time_str = format_time(raw_time)
+
+                temp = slot.get("temp_F") or slot.get("tempF", "--")
+                feels = slot.get("FeelsLikeF") or slot.get("FeelsLikeF", "--")
+                desc = slot.get("weatherDesc", [{}])[0].get("value", "Unknown")
+                symbol = WWO_CODE.get(slot.get("weatherCode", ""), "Unknown")
+                rain_chance = int(slot.get("chanceofrain", 0))
+
+                if rain_chance > 0:
+                    rain_str = f" ({rain_chance}% rain)"
+                else:
+                    rain_str = ""
+                card_text = f"---{time_str}---\n {temp}°F {WEATHER_SYMBOL.get(symbol, '✨')}{rain_str}"
+
+                self.root.after(0, lambda v=self.card_vals[i], t=card_text: v.set(t))
+
 
             # Check for non-sunny conditions across the full day
             adverse_conditions = []
-            for slot in today_hourly:
-                desc = slot['weatherDesc'][0]['value'].lower()
-                time_hr = int(slot['time']) // 100
 
+            # Check for humidity
+            humidity_levels = [int(slot.get("humidity", 0)) for slot in card_data]
+
+
+            for slot in hourly_forecast:
+                desc = slot.get('weatherDesc', [{}])[0].get('value', '').lower()
+                time_hr = int(slot.get('time', 0)) // 100
                 if any(w in desc for w in ['rain', 'shower', 'thunder', 'storm', 'snow', 'drizzle']):
                     time_fmt = f"{time_hr} AM" if time_hr < 12 else (f"{time_hr - 12} PM" if time_hr > 12 else "12 PM")
                     adverse_conditions.append(f"{slot['weatherDesc'][0]['value']} around {time_fmt}")
-
             # Build spoken text report
             report = (
                 f"Good morning! Here is your daily weather forecast for {location}. "
-                f"Right now, it is {current_desc} and {current_temp} degrees. "
-                f"At noon, expect {noon_desc} and {noon_temp} degrees. "
-                f"By 5 PM, it will be {five_pm_desc} and {five_pm_temp} degrees. "
+                f"Right now, it is {card_data[0]['weatherDesc'][0]['value']} and {card_data[0].get('temp_F', '--')} degrees and feels like {card_data[0].get('FeelsLikeF', '--')}. "
+                f"At {format_time(int(card_data[1]['time']) // 100)}, expect {card_data[1]['weatherDesc'][0]['value']} and {card_data[1].get('tempF', '--')} degrees with a feels like of {card_data[1].get('FeelsLikeF', '--')}. "
+                f"By {format_time(int(card_data[2]['time']) // 100)}, it will be {card_data[2]['weatherDesc'][0]['value']} and {card_data[2].get('tempF', '--')} degrees with a feels like of {card_data[2].get('FeelsLikeF', '--')}. "
             )
-
+            if any(h > 80 for h in humidity_levels):
+                report += "Humidity levels are expected to be high today. "
             if adverse_conditions:
                 unique_warnings = list(dict.fromkeys(adverse_conditions))[:3]
-                report += f"Take note: inclement weather is expected today with {', '.join(unique_warnings)}."
+                report += f"Inclement weather is expected today with {', '.join(unique_warnings)}."
             else:
                 report += "Clear and sunny conditions are expected throughout the rest of the day."
-
             self.cached_weather_report = report
 
         except Exception as e:
@@ -484,7 +737,7 @@ class SmartAlarmApp:
         if not self.cached_weather_report:
             self.fetch_and_update_weather()
 
-    # ONLY generate if the file doesn't exist yet
+        # ONLY generate if the file doesn't exist yet
         if not os.path.exists(tts_file):
             print("[TTS] Generating new weather audio file...")
             tts = gTTS(text=self.cached_weather_report, lang="en", tld="com")
@@ -518,6 +771,11 @@ class SmartAlarmApp:
 
     def skip_routine_step(self):
         self.skip_requested = True
+        self.stop_all_audio()
+
+    def end_routine(self):
+        print("[ROUTINE] Instant end requested.")
+        self.end_requested = True
         self.stop_all_audio()
 
     def resolve_audio_url(self, rss_url, fallback_page_url=None):
@@ -606,16 +864,19 @@ class SmartAlarmApp:
 
     def run_morning_routine(self):
         self.routine_running = True
+        self.end_requested = False
         self.root.after(0, self.wake_screen)
+
+
 
         # Pre-fetch news audio streams in background
         threading.Thread(target=self.prefetch_routine_urls, daemon=True).start()
 
         # Hide alarm controls, show weather boxes & routine controls
-        self.root.after(0, lambda: self.controls_frame.pack_forget())
-        self.root.after(0, lambda: self.weather_cards_frame.pack(pady=8, before=self.routine_status_label))
-        self.root.after(0, lambda: self.routine_controls_frame.pack(side="bottom", fill="x", padx=15, pady=20))
+        self.root.after(0, lambda: self.pack_routine())
         self.root.after(0, lambda: self.routine_controls_frame.lift())
+
+  
 
         # ----------------------------------------------------
         # STEP 1: Spoken Weather Briefing & Box Update
@@ -624,98 +885,84 @@ class SmartAlarmApp:
         self.is_paused = False
         self.root.after(0, lambda: self.pause_btn.config(bg="#333333"))
         self.root.after(0, lambda: self.play_btn.config(bg="#2E7D32"))
-        self.set_routine_display("Spoken Weather Briefing", "WUNC 91.5 FM (NPR)")
+        self.set_routine_display("Spoken Weather Briefing", "NYT: The Headlines")
 
         # Fetch fresh weather and populate boxes now that alarm was dismissed
         self.fetch_and_update_weather()
-
-        try:
-            briefing_mp3 = self.generate_weather_briefing()
-            self.current_proc = subprocess.Popen([
-                "mpv", "--no-terminal", briefing_mp3
-            ], preexec_fn=os.setsid)
-
-            while self.current_proc and self.current_proc.poll() is None:
-                if self.skip_requested:
-                    self.stop_all_audio()
-                    break
-                time.sleep(0.5)
-
-        except Exception as e:
-            print(f"Error playing briefing: {e}")
-        finally:
-            if os.path.exists(briefing_mp3):
-                os.remove(briefing_mp3)
-                print("[CLEANUP] Deleted temporary briefing audio file.")
-        # ----------------------------------------------------
-        # STEP 2: WUNC 91.5 FM Live NPR/NC News (10 Minute Limit)
-        # ----------------------------------------------------
-        self.skip_requested = False
-        self.is_paused = False
-        self.root.after(0, lambda: self.pause_btn.config(bg="#333333"))
-        self.root.after(0, lambda: self.play_btn.config(bg="#2E7D32"))
-        self.set_routine_display("WUNC 91.5 FM (NPR & Local News)", "NYT: The Headlines")
-
-        try:
-            self.current_proc = subprocess.Popen([
-                "mpv", "--no-terminal", WUNC_LIVE_URL
-            ], preexec_fn=os.setsid)
-
-            start_time = time.time()
-            max_duration = 600  # 10 minutes
-
-            while self.current_proc and self.current_proc.poll() is None:
-                if (time.time() - start_time >= max_duration) or self.skip_requested:
-                    self.stop_all_audio()
-                    break
-                time.sleep(0.5)
-
-        except Exception as e:
-            print(f"Error playing WUNC: {e}")
-
-        # ----------------------------------------------------
-        # STEP 3: NYT "The Headlines" (~10 Min News Summary)
-        # ----------------------------------------------------
-        self.skip_requested = False
-        self.is_paused = False
-        self.root.after(0, lambda: self.pause_btn.config(bg="#333333"))
-        self.root.after(0, lambda: self.play_btn.config(bg="#2E7D32"))
-        self.set_routine_display("NYT: The Headlines", "NYT: The Daily")
-
-        audio_url = self.cached_headlines_url
-        if not audio_url:
-            audio_url = self.resolve_audio_url(
-                HEADLINES_PODCAST_RSS,
-                fallback_page_url="https://www.nytimes.com/column/the-headlines"
-            )
-
-        try:
-            if audio_url:
-                # User-Agent header passed directly to MPV to ensure HTTP standard compliance
+        if not self.end_requested:
+            try:
+                briefing_mp3 = self.generate_weather_briefing()
                 self.current_proc = subprocess.Popen([
-                    "mpv", "--no-video", "--no-terminal",
-                    "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36", audio_url
+                    "mpv", "--no-terminal", briefing_mp3
                 ], preexec_fn=os.setsid)
 
                 while self.current_proc and self.current_proc.poll() is None:
-                    if self.skip_requested:
+                    if self.skip_requested or self.end_requested:
                         self.stop_all_audio()
                         break
                     time.sleep(0.5)
-            else:
-                print("Could not find audio stream for The Headlines.")
 
-        except Exception as e:
-            print(f"Error playing NYT Headlines: {e}")
+            except Exception as e:
+                print(f"Error playing briefing: {e}")
+            finally:
+                if os.path.exists(briefing_mp3):
+                    try:
+                        os.remove(briefing_mp3)
+                        print("[CLEANUP] Deleted temporary briefing audio file.")
+                    except Exception as e:
+                        print(f"[CLEANUP] Failed to delete briefing audio file: {e}")
 
         # ----------------------------------------------------
-        # STEP 4: NYT "The Daily" Podcast
+        # STEP 2: NYT "The Headlines" (~10 Min News Summary)
         # ----------------------------------------------------
-        self.skip_requested = False
-        self.is_paused = False
-        self.root.after(0, lambda: self.pause_btn.config(bg="#333333"))
-        self.root.after(0, lambda: self.play_btn.config(bg="#2E7D32"))
-        self.set_routine_display("NYT: The Daily", None)
+        if self.end_requested:
+            self.root.after(0, self.cleanup_routine_ui)
+            return
+        if not self.end_requested:
+            self.skip_requested = False
+            self.is_paused = False
+            self.root.after(0, lambda: self.pause_btn.config(bg="#333333"))
+            self.root.after(0, lambda: self.play_btn.config(bg="#2E7D32"))
+            self.set_routine_display("NYT: The Headlines", "NYT: The Daily")
+    
+            audio_url = self.cached_headlines_url
+            if not audio_url:
+                audio_url = self.resolve_audio_url(
+                    HEADLINES_PODCAST_RSS,
+                    fallback_page_url="https://www.nytimes.com/column/the-headlines"
+                )
+    
+            try:
+                if audio_url:
+                    # User-Agent header passed directly to MPV to ensure HTTP standard compliance
+                    self.current_proc = subprocess.Popen([
+                        "mpv", "--no-video", "--no-terminal",
+                        "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36", audio_url
+                    ], preexec_fn=os.setsid)
+    
+                    while self.current_proc and self.current_proc.poll() is None:
+                        if self.skip_requested or self.end_requested:
+                            self.stop_all_audio()
+                            break
+                        time.sleep(0.5)
+                else:
+                    print("Could not find audio stream for The Headlines.")
+    
+            except Exception as e:
+                print(f"Error playing NYT Headlines: {e}")
+
+        # ----------------------------------------------------
+        # STEP 3: NYT "The Daily" Podcast
+        # ----------------------------------------------------
+        if self.end_requested:
+            self.root.after(0, self.cleanup_routine_ui)
+            return
+        if not self.end_requested:
+            self.skip_requested = False
+            self.is_paused = False
+            self.root.after(0, lambda: self.pause_btn.config(bg="#333333"))
+            self.root.after(0, lambda: self.play_btn.config(bg="#2E7D32"))
+            self.set_routine_display("NYT: The Daily", "WUNC 91.5 FM (NPR & Local News)")
 
         podcast_url = self.cached_daily_url
         if not podcast_url:
@@ -732,34 +979,74 @@ class SmartAlarmApp:
                 ], preexec_fn=os.setsid)
 
                 while self.current_proc and self.current_proc.poll() is None:
-                    if self.skip_requested:
+                    if self.skip_requested or self.end_requested:
                         self.stop_all_audio()
                         break
                     time.sleep(0.5)
             else:
                 print("Could not find audio stream for The Daily.")
-
+        
         except Exception as e:
             print(f"Error playing The Daily: {e}")
 
+        # ----------------------------------------------------
+        # STEP 4: WUNC 91.5 FM Live NPR/NC News (Indefinite)
+        # ----------------------------------------------------
+        if self.end_requested:
+            self.root.after(0, self.cleanup_routine_ui)
+            return
+        if not self.end_requested:
+            self.skip_requested = False
+            self.is_paused = False
+            self.root.after(0, lambda: self.pause_btn.config(bg="#333333"))
+            self.root.after(0, lambda: self.play_btn.config(bg="#2E7D32"))
+            self.set_routine_display("WUNC 91.5 FM (NPR & Local News)", None)
+
+            try:
+                self.current_proc = subprocess.Popen([
+                    "mpv", "--no-terminal", WUNC_LIVE_URL
+                ], preexec_fn=os.setsid)
+
+                while self.current_proc and self.current_proc.poll() is None:
+                    if self.skip_requested or self.end_requested:
+                        self.stop_all_audio()
+                        break
+                    time.sleep(0.5)
+
+            except Exception as e:
+                print(f"Error playing WUNC: {e}")
+
+        
+
         # Routine complete cleanup
         self.root.after(0, self.cleanup_routine_ui)
+    
+    def clear_view(self):
+        self.controls_frame.pack_forget()
+        self.weather_cards_frame.pack_forget()
+        self.routine_status_label.pack_forget()
+        self.up_next_label.pack_forget()
+        self.routine_controls_frame.pack_forget()
+        self.dismiss_btn.pack_forget()
+
 
     def cleanup_routine_ui(self):
-        self.routine_status_label.config(text="Routine Completed!")
-        self.up_next_label.config(text="")
-        self.routine_controls_frame.pack_forget()
+        self.stop_all_audio()
 
-        # Hide weather cards frame when routine finishes
-        self.weather_cards_frame.pack_forget()
+        tts_file = "/tmp/morning_briefing.mp3"
+        if os.path.exists(tts_file):
+            try:
+                os.remove(tts_file)
+            except Exception:
+                pass
 
-        self.controls_frame.pack(pady=10)
-
-        self.pause_btn.config(bg="#333333")
-        self.play_btn.config(bg="#2E7D32")
-        self.root.after(3000, lambda: self.routine_status_label.config(text=""))
 
         self.routine_running = False
+        self.skip_requested = False
+        self.is_paused = False
+        self.end_requested = False
+        self.clear_view()
+        self.pack_default_view()
         self.wake_screen()
 
     def close_app(self):
