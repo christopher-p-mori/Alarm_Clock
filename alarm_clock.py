@@ -381,19 +381,20 @@ class SmartAlarmApp:
         self.time_entry.bind("<Button-1>", self.open_numpad)
         self.toggle_btn.grid(row=0, column=1, padx=8)
         self.sound_dropdown.grid(row=1, column=0, columnspan=2, pady=2, sticky="ew")
-
+    ## This upack function my be redundant, stupid, or both
     def unpack_controls_container(self):
         self.time_entry.grid_forget()
         self.toggle_btn.grid_forget()
         self.sound_dropdown.grid_forget()
 
     def pack_routine(self):
-        self.routine_status_label.pack(pady=(5, 0))
-        self.up_next_label.pack(pady=(2, 0))
+        self.routine_status_label.pack(pady=(0, 0))
+        self.up_next_label.pack(pady=(2, 2))
         self.pause_btn.grid(row=0, column=0, padx=8, sticky="ew")
         self.play_btn.grid(row=0, column=1, padx=8, sticky="ew")
         self.skip_btn.grid(row=0, column=2, padx=8, sticky="ew")
         self.end_btn.grid(row=0, column=3, padx=8, sticky="ew")
+        self.routine_controls_frame.pack()
 
     def unpack_routine(self):
         self.routine_status_label.pack_forget()
@@ -559,6 +560,7 @@ class SmartAlarmApp:
         self.controls_frame.pack_forget()
         self.next_alarm_label.config(text="WAKE UP!", fg="yellow")
         self.dismiss_btn.pack(expand=True, fill="both", side="bottom", pady=10)
+        
 
         sound_file = os.path.join(SOUNDS_DIR, self.sound_var.get())
 
@@ -595,6 +597,7 @@ class SmartAlarmApp:
         self.stop_all_audio()
 
         self.dismiss_btn.pack_forget()
+        self.actions_frame.pack_forget()
         self.toggle_alarm()
 
         threading.Thread(target=self.run_morning_routine, daemon=True).start()
@@ -861,13 +864,13 @@ class SmartAlarmApp:
         self.end_requested = False
         self.root.after(0, self.wake_screen)
 
+
+
         # Pre-fetch news audio streams in background
         threading.Thread(target=self.prefetch_routine_urls, daemon=True).start()
 
         # Hide alarm controls, show weather boxes & routine controls
-        self.root.after(0, lambda: self.controls_frame.pack_forget())
-        self.root.after(0, lambda: self.weather_cards_frame.pack(pady=8, before=self.routine_status_label))
-        self.root.after(0, lambda: self.routine_controls_frame.pack(side="bottom", fill="x", padx=15, pady=2))
+        self.root.after(0, lambda: self.pack_routine())
         self.root.after(0, lambda: self.routine_controls_frame.lift())
 
   
@@ -1020,44 +1023,15 @@ class SmartAlarmApp:
         self.routine_controls_frame.pack_forget()
         self.dismiss_btn.pack_forget()
 
-    def reset_to_default_view(self):
-        """Resets the UI to its default state after a routine or alarm ends."""
-        self.clear_view()
-
-        # 2. CLEAR ROUTINE TEXT
-        self.routine_status_label.config(text="")
-        self.up_next_label.config(text="")
-
-        # 3. REPACK IN STRICT TOP-TO-BOTTOM ORDER
-        # (self.clock_label and self.next_alarm_label stay static at the top)
-        
-        # Weather Cards directly below the clock status
-        self.weather_cards_frame.pack(fill="x", expand=False, padx=10, pady=5)
-        
-        # Alarm Time & Controls directly below the weather cards
-        self.controls_frame.pack(pady=5)
-
-    def show_routine_view(self):
-            """Switches layout to active Routine Mode."""
-            # Unpack default alarm controls
-            self.controls_frame.pack_forget()
-            self.dismiss_btn.pack_forget()
-
-            # Pack Weather -> Status Labels -> Media Controls Bar
-            self.weather_cards_frame.pack(fill="x", expand=False, padx=10, pady=5)
-            self.routine_status_label.pack(pady=(5, 0))
-            self.up_next_label.pack(pady=(2, 0))
-            self.routine_controls_frame.pack(side="bottom", fill="x", padx=15, pady=5)
 
     def cleanup_routine_ui(self):
         self.stop_all_audio()
         self.routine_running = False
-        self.reset_to_default_view()
-
-        self.pause_btn.config(bg="#333333")
-        self.play_btn.config(bg="#2E7D32")
-
-        self.routine_running = False
+        self.skip_requested = False
+        self.is_paused = False
+        self.end_requested = False
+        self.clear_view()
+        self.pack_default_view()
         self.wake_screen()
 
     def close_app(self):
